@@ -278,6 +278,26 @@ def test_matching_traceback_blocks_reverses_the_squashed_id():
     assert "unrelated block" not in result
 
 
+def test_matching_traceback_blocks_ignores_a_mention_in_the_body():
+    """A block's own exception line is its *last* line -- text elsewhere in
+    the block (e.g. a retry handler logging a different exception's
+    message) must not cause a false match. Regression guard for the bug
+    flagged on PR #33: `needle.search(block)` used to search the whole
+    block rather than being anchored to its final line."""
+    dumped = (
+        "2026-01-01 10:00:00,000 123 ERROR demo odoo.addons.base.models.ir_cron: "
+        "Job 'retry cron' failed\n"
+        "Traceback (most recent call last):\n"
+        "  File demo.py, line 1, in run\n"
+        "    logger.warning(\"previous attempt failed: KeyError: 'socket'\")\n"
+        "ValueError: retry limit exceeded\n"
+    )
+
+    result = probes._matching_traceback_blocks(dumped, "KeyError", "'socket'")
+
+    assert result == ""
+
+
 def test_matching_traceback_blocks_no_match_is_empty():
     dumped = "2026-01-01 10:00:00,000 123 ERROR demo odoo.modules.loading: something else\n"
     assert probes._matching_traceback_blocks(dumped, "KeyError", "'socket'") == ""
