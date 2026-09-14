@@ -852,3 +852,13 @@ def test_shell_command_skips_interpreter_flags(monkeypatch):
         monkeypatch.setattr(probes, "procs_of", _fake_procs(f"/usr/bin/python3 {script} --config=/etc/odoo.conf"))
         expected = f"/usr/bin/python3 {script} shell --no-http --config=/etc/odoo.conf"
         assert probes.shell_command(_INSTANCE, Host()) == expected, script
+
+
+def test_ps_snapshot_requests_unlimited_width(monkeypatch):
+    """`-ww` -- otherwise procps truncates `args` to $COLUMNS, silently
+    cutting a long instance's -c/--logfile off the end."""
+    calls = _recorder(monkeypatch, stdout="PID PPID USER %MEM NICE ARGS\n")
+
+    probes._ps_snapshot(Host())
+
+    assert calls == [["ps", "-ww", "-eo", "pid,ppid,user,%mem,nice,args"]]
