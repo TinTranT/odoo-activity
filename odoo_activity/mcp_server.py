@@ -8,10 +8,11 @@ tool call to that one target (local if omitted) -- the counterpart to `oa
 --host-filter.
 
 `--enable-plugins=odooly` adds the one non-read-only exception:
-list_odooly_envs, instance_odooly_env and odooly_run_script, matching a
-database against ~/odooly.ini and running the odooly plugin's scripts -- the
-same actions that plugin offers a human through the TUI's Toolbox, now
-offered to the agent directly. It needs the extra installed
+list_odooly_envs, instance_odooly_env, and the odooly plugin's scripts --
+create_test_job, restore_app_icons, send_test_mail -- each its own tool,
+matching a database against ~/odooly.ini and running the same actions that
+plugin offers a human through the TUI's Toolbox, now offered to the agent
+directly. It needs the extra installed
 (`odoo-activity[odooly]`); the flag stays because a server exposing them to
 an agent is a decision worth making explicitly, which installing a package
 is not.
@@ -189,7 +190,6 @@ class StackDump(TypedDict):
 
 
 DbQueryCommand = Literal["modules", "crons", "jobs", "users", "locks", "params", "check-sensitive-information"]
-OdoolyScript = Literal["create_test_job", "restore_app_icons", "send_test_mail"]
 
 
 # Discovery is 8 ssh round trips (~620ms remote) behind every tool. Only the
@@ -596,8 +596,9 @@ def mail_audit(db: str, port: str | None = None, *, target: Host) -> dict | str:
 @mcp.tool()
 def list_odooly_envs() -> list[str]:
     """Every environment section name in ~/odooly.ini -- what `env` on
-    `odooly_run_script` accepts, and the set `instance_odooly_env` matches
-    against. Requires --enable-plugins=odooly.
+    `create_test_job`, `restore_app_icons`, and `send_test_mail` accepts, and
+    the set `instance_odooly_env` matches against. Requires
+    --enable-plugins=odooly.
     """
     return [env["name"] for env in _odooly().read_odooly_envs()]
 
@@ -621,36 +622,58 @@ def instance_odooly_env(name: str, db: str) -> str | None:
 
 
 @mcp.tool()
-def odooly_run_script(script: OdoolyScript, env: str, to: str | None = None) -> str:
-    """Run one of odoo-activity's packaged odooly scripts against `env`, and
-    return what it printed (stdout, then stderr). Requires --enable-plugins=odooly.
-
-    create_test_job: queue one of queue_job's own test jobs, to check
-        whether a runner picks it up.
-    restore_app_icons: rewrite the apps-menu icons a restore-without-
-        filestore leaves blank.
-    send_test_mail: send one real email through mail.mail, to check outbound
-        mail actually reaches an inbox. Needs `to`.
+def create_test_job(env: str) -> str:
+    """Queue one of queue_job's own test jobs against `env`, to check whether
+    a runner picks it up, and return what the script printed (stdout, then
+    stderr). Requires --enable-plugins=odooly.
 
     Always local, even against a remote `host`: odooly reaches the instance
     over the network from wherever this server runs, using its own
     ~/odooly.ini -- never over ssh.
 
     Args:
-        script: create_test_job, restore_app_icons, or send_test_mail.
         env: odooly env, e.g. from `instance_odooly_env` or
             `list_odooly_envs`.
-        to: recipient address -- required for send_test_mail, ignored
-            otherwise.
     """
-    odooly = _odooly()
-    if script == "send_test_mail":
-        if not to:
-            msg = "send_test_mail needs `to` (recipient address)"
-            raise ValueError(msg)
-        return odooly.run_odooly_script(script, env, "--to", to)
+    return _odooly().run_odooly_script("create_test_job", env)
 
-    return odooly.run_odooly_script(script, env)
+
+@mcp.tool()
+def restore_app_icons(env: str) -> str:
+    """Rewrite the apps-menu icons a restore-without-filestore leaves blank,
+    on `env`, and return what the script printed (stdout, then stderr).
+    Requires --enable-plugins=odooly.
+
+    Always local, even against a remote `host`: odooly reaches the instance
+    over the network from wherever this server runs, using its own
+    ~/odooly.ini -- never over ssh.
+
+    Args:
+        env: odooly env, e.g. from `instance_odooly_env` or
+            `list_odooly_envs`.
+    """
+    return _odooly().run_odooly_script("restore_app_icons", env)
+
+
+@mcp.tool()
+def send_test_mail(env: str, to: str) -> str:
+    """Send one real email through mail.mail on `env`, to check outbound mail
+    actually reaches an inbox, and return what the script printed (stdout,
+    then stderr). Requires --enable-plugins=odooly.
+
+    Always local, even against a remote `host`: odooly reaches the instance
+    over the network from wherever this server runs, using its own
+    ~/odooly.ini -- never over ssh.
+
+    Args:
+        env: odooly env, e.g. from `instance_odooly_env` or
+            `list_odooly_envs`.
+        to: recipient address.
+    """
+    if not to:
+        msg = "send_test_mail needs `to` (recipient address)"
+        raise ValueError(msg)
+    return _odooly().run_odooly_script("send_test_mail", env, "--to", to)
 
 
 @mcp.tool()
@@ -708,8 +731,9 @@ def main(
         typer.Option(
             "--enable-plugins",
             help="Plugins (comma-separated, or repeat the flag) whose gated tools should be exposed, "
-            "e.g. --enable-plugins=odooly to expose list_odooly_envs/instance_odooly_env/odooly_run_script, "
-            "or --enable-plugins=pos (pulls in odooly too) to also expose pos_status -- matching databases "
+            "e.g. --enable-plugins=odooly to expose list_odooly_envs/instance_odooly_env/create_test_job/"
+            "restore_app_icons/send_test_mail, or --enable-plugins=pos (pulls in odooly too) to also expose "
+            "pos_status -- matching databases "
             "against ~/odooly.ini the same way `oa --enable-plugins=...` does. Launch-time only -- no tool "
             "call can turn this on itself; set it only if the agent should be able to log in and reach a "
             "matched database. Omit to expose none of them.",
@@ -773,8 +797,9 @@ def main_multi(
         typer.Option(
             "--enable-plugins",
             help="Plugins (comma-separated, or repeat the flag) whose gated tools should be exposed, "
-            "e.g. --enable-plugins=odooly to expose list_odooly_envs/instance_odooly_env/odooly_run_script, "
-            "or --enable-plugins=pos (pulls in odooly too) to also expose pos_status -- matching databases "
+            "e.g. --enable-plugins=odooly to expose list_odooly_envs/instance_odooly_env/create_test_job/"
+            "restore_app_icons/send_test_mail, or --enable-plugins=pos (pulls in odooly too) to also expose "
+            "pos_status -- matching databases "
             "against ~/odooly.ini the same way `oa --enable-plugins=...` does. Launch-time only -- no tool "
             "call can turn this on itself; set it only if the agent should be able to log in and reach a "
             "matched database. Omit to expose none of them.",
