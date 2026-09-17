@@ -6,7 +6,9 @@ controller rather than over RPC: the controller calls
 reachable from a client — `with_delay` is a python-level API, and `_test_job`
 is private, which Odoo refuses to expose. So odooly is used for what it is
 good for here (resolving `--env` to a server, database and credentials) and
-the two calls the controller needs go over plain HTTP.
+the two calls the controller needs go over plain HTTP. Only works against
+`--env` sections with a real HTTP server -- `scheme = local` envs have
+nothing to reach and are rejected.
 
     python -m odoo_activity.plugins.odooly.scripts.create_test_job --env acme18-int
 """
@@ -85,7 +87,12 @@ def main(env: str = typer.Option(..., "--env", help="Section of ~/odooly.ini to 
         typer.echo(f"'{env}' has no password in ~/odooly.ini, and this can't prompt for one", err=True)
         raise typer.Exit(1)
 
-    server = server if isinstance(server, str) else server[0]
+    if not isinstance(server, str):
+        # scheme = local: `server` is a list of local-launch shell tokens
+        # (or [] if the section has neither `server` nor `options`), not a
+        # URL — there is no HTTP endpoint to reach.
+        typer.echo(f"'{env}' uses scheme = local, which has no HTTP endpoint to create a test job on", err=True)
+        raise typer.Exit(1)
 
     try:
         base_url, auth = _base_url(server)
