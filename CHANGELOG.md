@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v0.26.1 (2026-09-18)
+
+### Bug Fixes
+
+- **odooly**: Create_test_job survives credentialed URLs and basic-auth gates
+  ([`25c5a8e`](https://github.com/trobz/odoo-activity/commit/25c5a8ebed927505e29b2117c887ab71b9dedcc5))
+
+- **odooly**: Handle scheme=local envs in create_test_job
+  ([`138519f`](https://github.com/trobz/odoo-activity/commit/138519ffea747e41936739f453426dc14968275e))
+
+### Refactoring
+
+- **mcp**: Split odooly_run_script into explicit per-script tools
+  ([`6d29b8a`](https://github.com/trobz/odoo-activity/commit/6d29b8a50d6c42de1b4b25195ea099e7012acdae))
+
+
 ## v0.26.0 (2026-09-10)
 
 ### Features
