@@ -66,6 +66,13 @@ _SSH_OPTS = [
     "ServerAliveCountMax=2",
 ]
 
+# sshd runs our command through the box's login shell -- dash, on odoo.sh --
+# which, unlike bash, won't expand a literal `~` in PATH at lookup time. That
+# hides the tools odoo.sh installs under `~/.local/bin`, which is the one
+# entry the shell was meant to expand: prepend it already expanded rather
+# than rewrite PATH, so the inherited entries are left exactly as they came.
+_REMOTE_PATH_FIX = 'PATH="$HOME/.local/bin:$PATH"'
+
 
 # subprocess inherits our stdin, which is the terminal Textual reads keys
 # from, and ssh forwards stdin to the remote command (BatchMode only stops
@@ -120,7 +127,8 @@ class Host:
         if self.alias is None:
             return argv
         port_opts = ["-p", str(self.port)] if self.port else []
-        return ["ssh", *_SSH_OPTS, *port_opts, self.alias, shlex.join(argv)]
+        remote_cmd = f"{_REMOTE_PATH_FIX} {shlex.join(argv)}"
+        return ["ssh", *_SSH_OPTS, *port_opts, self.alias, remote_cmd]
 
     def shell_invocation(self, cmd: str) -> str:
         """`cmd` as the user should paste it into their own terminal to

@@ -1,6 +1,6 @@
 import subprocess
 
-from odoo_activity.host import _SSH_OPTS, Host
+from odoo_activity.host import _REMOTE_PATH_FIX, _SSH_OPTS, Host
 
 
 def test_spawns_never_inherit_our_stdin(monkeypatch):
@@ -57,7 +57,7 @@ def test_remote_run_wraps_in_ssh(monkeypatch):
 
     Host(alias="openerp@demo").run(["echo", "hi there"])
 
-    assert captured["cmd"] == ["ssh", *_SSH_OPTS, "openerp@demo", "echo 'hi there'"]
+    assert captured["cmd"] == ["ssh", *_SSH_OPTS, "openerp@demo", f"{_REMOTE_PATH_FIX} echo 'hi there'"]
 
 
 def test_remote_popen_wraps_in_ssh(monkeypatch):
@@ -72,8 +72,35 @@ def test_remote_popen_wraps_in_ssh(monkeypatch):
 
     child = Host(alias="x").popen(["tail", "-f", "/var/log/odoo.log"])
 
-    assert captured["cmd"] == ["ssh", *_SSH_OPTS, "x", "tail -f /var/log/odoo.log"]
+    assert captured["cmd"] == ["ssh", *_SSH_OPTS, "x", f"{_REMOTE_PATH_FIX} tail -f /var/log/odoo.log"]
     assert child == "the-child"
+
+
+def test_remote_path_fix_puts_the_expanded_local_bin_first():
+    """odoo.sh bakes `~/.local/bin` into PATH; sshd's dash won't expand `~`
+    there the way bash does, hiding our tools. Prepending the expanded dir
+    fixes the lookup without touching the entries we were handed.
+
+    Runs through a real shell: the tests above only prove the fix gets
+    spliced in, not that it does anything.
+    """
+
+    def path_under_sh(path: str) -> str:
+        # nested `sh -c`: a prefix assignment reaches the command's own
+        # environment, but the outer shell expands `$PATH` before it applies
+        run = subprocess.run(  # noqa: S603  -- our own constant, not untrusted input
+            ["sh", "-c", f"""{_REMOTE_PATH_FIX} sh -c 'printf %s "$PATH"'"""],  # noqa: S607  -- `sh` is the point
+            env={"PATH": path, "HOME": "/home/odoo"},
+            capture_output=True,
+            text=True,
+        )
+        return run.stdout
+
+    # odoo.sh's own PATH: the unusable `~/.local/bin` stays, but the usable
+    # one now comes first, so the lookup finds our tools
+    assert path_under_sh("~/.local/bin:/usr/bin") == "/home/odoo/.local/bin:~/.local/bin:/usr/bin"
+    # everywhere else: inherited entries keep their order, one dir ahead of them
+    assert path_under_sh("/usr/bin:/bin") == "/home/odoo/.local/bin:/usr/bin:/bin"
 
 
 def test_a_missing_tool_is_exit_127_not_an_exception():
