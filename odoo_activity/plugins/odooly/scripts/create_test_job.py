@@ -6,21 +6,20 @@ controller rather than over RPC: the controller calls
 reachable from a client — `with_delay` is a python-level API, and `_test_job`
 is private, which Odoo refuses to expose. So odooly is used for what it is
 good for here (resolving `--env` to a server, database and credentials) and
-the two calls the controller needs go over plain HTTP.
+the two calls the controller needs go over plain HTTP. Only works against
+`--env` sections with a real HTTP server -- `scheme = local` envs have
+nothing to reach and are rejected.
 
     python -m odoo_activity.plugins.odooly.scripts.create_test_job --env acme18-int
 """
 
 from __future__ import annotations
 
-import json
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
-from http.cookiejar import CookieJar
+from urllib.parse import urlparse, urlunparse
 
 import odooly
+import requests
 import typer
 
 from odoo_activity.plugins.odooly.scripts import redact, use_user_config
@@ -31,40 +30,45 @@ TIMEOUT = 30
 _LOGIN_REFUSED = "login refused — check the credentials in ~/odooly.ini"
 
 
-def _base_url(server: str) -> str:
-    """The instance's root, from whatever odooly resolved `--env` to: its
-    `server` is an endpoint (`https://host/jsonrpc`), not a site root, and
-    the controllers below hang off the root."""
-    parts = urllib.parse.urlsplit(server)
+def _base_url(server: str) -> tuple[str, tuple[str, str] | None]:
+    """The instance's root plus basic-auth credentials, from whatever odooly
+    resolved `--env` to. Its `server` is an endpoint
+    (`https://user:password@host/xmlrpc`), not a site root, and the
+    controllers below hang off the root. Credentials in the URL would make
+    requests resolve them as a hostname (`Name or service not known`), so
+    they are pulled out and carried as HTTP basic auth instead — some hosts
+    (staging boxes behind an nginx gate) also demand it on their own."""
+    parts = urlparse(server)
+    base_url = urlunparse((parts.scheme, parts.netloc, "", "", "", ""))
 
-    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+    return base_url, ((parts.username or "", parts.password or "") if parts.username or parts.password else None)
 
 
-def create_test_job(base_url: str, db: str, login: str, password: str) -> str:
+def create_test_job(base_url: str, db: str, login: str, password: str, auth: tuple[str, str] | None) -> str:
     """Log in, ask queue_job for a test job, and return its uuid."""
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(CookieJar()))
+    session = requests.Session()
+    if auth:
+        session.auth = auth
 
-    payload = json.dumps({
-        "jsonrpc": "2.0",
-        "method": "call",
-        "params": {"db": db, "login": login, "password": password},
-    }).encode()
-    request = urllib.request.Request(  # noqa: S310 -- scheme comes from odooly's own config
+    answer = session.post(
         f"{base_url}/web/session/authenticate",
-        data=payload,
-        headers={"Content-Type": "application/json"},
+        json={"jsonrpc": "2.0", "method": "call", "params": {"db": db, "login": login, "password": password}},
+        timeout=TIMEOUT,
     )
-
-    with opener.open(request, timeout=TIMEOUT) as response:
-        answer = json.loads(response.read())
+    answer.raise_for_status()
+    answer = answer.json()
 
     # a failed login is a 200 with an `error` member, not an HTTP error
     if "error" in answer or not answer.get("result", {}).get("uid"):
         raise RuntimeError(_LOGIN_REFUSED)
 
-    with opener.open(f"{base_url}/queue_job/create_test_job", timeout=TIMEOUT) as response:
-        # older queue_job answers with the bare uuid, newer with "job uuid: <uuid>"
-        return response.read().decode().replace("job uuid: ", "").strip()
+    # GET, not POST: older queue_job routes the controller as http GET only,
+    # and answers a POST with a bare 400
+    response = session.get(f"{base_url}/queue_job/create_test_job", timeout=TIMEOUT)
+    response.raise_for_status()
+
+    # older queue_job answers with the bare uuid, newer with "job uuid: <uuid>"
+    return response.text.replace("job uuid: ", "").strip()
 
 
 @app.command()
@@ -83,9 +87,17 @@ def main(env: str = typer.Option(..., "--env", help="Section of ~/odooly.ini to 
         typer.echo(f"'{env}' has no password in ~/odooly.ini, and this can't prompt for one", err=True)
         raise typer.Exit(1)
 
+    if not isinstance(server, str):
+        # scheme = local: `server` is a list of local-launch shell tokens
+        # (or [] if the section has neither `server` nor `options`), not a
+        # URL — there is no HTTP endpoint to reach.
+        typer.echo(f"'{env}' uses scheme = local, which has no HTTP endpoint to create a test job on", err=True)
+        raise typer.Exit(1)
+
     try:
-        uuid = create_test_job(_base_url(server), db, login, password)
-    except (urllib.error.URLError, RuntimeError, ValueError) as exc:
+        base_url, auth = _base_url(server)
+        uuid = create_test_job(base_url, db, login, password, auth)
+    except (requests.RequestException, RuntimeError, ValueError) as exc:
         # the server URL may embed the password -- see redact()
         typer.echo(f"could not create a test job on '{env}': {redact(str(exc), password)}", err=True)
         raise typer.Exit(1) from exc

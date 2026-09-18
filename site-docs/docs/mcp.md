@@ -36,22 +36,25 @@ itself. `mail_audit` (outbound mail config) follows the same rule for
 ## `--enable-plugins=odooly`
 
 The one non-read-only exception: `list_odooly_envs`, `instance_odooly_env`,
-and `odooly_run_script` match a database against `~/odooly.ini` and run the
-packaged scripts (`create_test_job`, `restore_app_icons`, `send_test_mail`),
-the same actions the TUI's odooly plugin offers a human through the
-Toolbox — now callable by the agent directly. Odooly logs in and can write
-to the matched database, so following the same launch-time-only pattern as
+and the packaged scripts as their own tools — `create_test_job`,
+`restore_app_icons`, `send_test_mail` — match a database against
+`~/odooly.ini` and run them, the same actions the TUI's odooly plugin offers
+a human through the Toolbox — now callable by the agent directly, one tool
+per script rather than a single dispatcher, so each shows up by name in an
+agent's tool list. Odooly logs in and can write to the matched database, so
+following the same launch-time-only pattern as
 `--include-sensitive-information`, `--enable-plugins` (comma-separated, or
 repeat the flag) can only be set on the command line when the server
 starts — no tool call can enable it from within a session, and all three
-tools raise if `odooly` wasn't named there. It needs the `odooly` extra
-installed too. Unlike the TUI, the flag stays: exposing write actions to an
-agent is worth deciding explicitly, and installing a package is not that
-decision.
+script tools raise if `odooly` wasn't named there. It needs the `odooly`
+extra installed too. Unlike the TUI, the flag stays: exposing write actions
+to an agent is worth deciding explicitly, and installing a package is not
+that decision.
 
-`odooly_run_script`/`instance_odooly_env` always resolve locally against
-this machine's own `~/odooly.ini`, regardless of `host`/`ssh_port` used to
-pin the server — odooly reaches instances over the network, not over ssh.
+`create_test_job`/`restore_app_icons`/`send_test_mail`/`instance_odooly_env`
+always resolve locally against this machine's own `~/odooly.ini`, regardless
+of `host`/`ssh_port` used to pin the server — odooly reaches instances over
+the network, not over ssh.
 
 `send_test_mail` sends one real email through `mail.mail` to check outbound
 mail actually reaches an inbox; it requires a `to` recipient, validated
@@ -72,8 +75,9 @@ the same launch-time-only way: naming `pos` pulls in `odooly` too (matching
 needs the `pos` extra installed (`odoo-activity[pos]`).
 
 Resolves locally against this machine's own `~/odooly.ini`, same as
-`odooly_run_script` — reaches the instance over the network, not over ssh,
-regardless of `host`/`ssh_port` used to pin the server.
+`create_test_job`/`restore_app_icons`/`send_test_mail` — reaches the
+instance over the network, not over ssh, regardless of `host`/`ssh_port`
+used to pin the server.
 
 See [Keybindings & Tabs — POS](keybindings.md#pos) for what each field
 means, including how it degrades on an instance whose version is missing a

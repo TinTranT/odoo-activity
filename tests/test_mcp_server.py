@@ -110,7 +110,7 @@ def test_odooly_tools_refuse_without_the_launch_time_flag(monkeypatch):
     with pytest.raises(ValueError, match="--enable-plugins=odooly"):
         mcp_server.instance_odooly_env("openerp-acme18-integration", "acme18_int")
     with pytest.raises(ValueError, match="--enable-plugins=odooly"):
-        mcp_server.odooly_run_script("restore_app_icons", "acme18-int")
+        mcp_server.restore_app_icons("acme18-int")
 
 
 def test_odooly_tools_delegate_to_the_plugin_once_enabled(monkeypatch):
@@ -127,10 +127,10 @@ def test_odooly_tools_delegate_to_the_plugin_once_enabled(monkeypatch):
         "run_odooly_script",
         lambda script, env, *extra: captured.update(script=script, env=env, extra=extra) or "ok",
     )
-    assert mcp_server.odooly_run_script("create_test_job", "acme18-int") == "ok"
+    assert mcp_server.create_test_job("acme18-int") == "ok"
     assert captured == {"script": "create_test_job", "env": "acme18-int", "extra": ()}
 
-    assert mcp_server.odooly_run_script("send_test_mail", "acme18-int", to="me@example.com") == "ok"
+    assert mcp_server.send_test_mail("acme18-int", to="me@example.com") == "ok"
     assert captured == {"script": "send_test_mail", "env": "acme18-int", "extra": ("--to", "me@example.com")}
 
 
@@ -140,7 +140,7 @@ def test_send_test_mail_needs_a_recipient(monkeypatch):
     monkeypatch.setattr(mcp_server, "_enabled_plugins", {"odooly"})
 
     with pytest.raises(ValueError, match="`to`"):
-        mcp_server.odooly_run_script("send_test_mail", "acme18-int")
+        mcp_server.send_test_mail("acme18-int", to="")
 
 
 def test_pos_status_refuses_without_the_launch_time_flag(monkeypatch):
