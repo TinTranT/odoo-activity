@@ -440,6 +440,10 @@ _OUR_TOOLS = ("odoo-activity", "odoo-config", "odoo-db", "odoo-addons-path")
 # 1234`. It replaces argv wholesale, so none of the entry-point/flag tests
 # below match it -- the prefix is the whole evidence, and it is odoo's own.
 _ODOO_TITLE_PREFIX = "odoo: "
+# odoo.sh's pid-1 init, its own proctitle: `ODOO.SH: [<build> / dev / 18.0]`.
+# The only thing on the box that names the platform, so it is how
+# `local_instances` knows it is on a build.
+_ODOOSH_INIT = "ODOO.SH:"
 # a root owned by one of these is already listed by that manager
 _MANAGER_PARENTS = ("systemd --user", "supervisord")
 # a containerized odoo is `docker_instances`' to list, not this manager's:
@@ -639,7 +643,9 @@ def local_instances(host: Host = LOCAL) -> list[Instance]:
     conf.d + supervisorctl, build env vars); here the process *is* the
     identity, and its argv stands in for the config a registry would name.
     Roots owned by systemd or supervisord are dropped, since those already
-    list themselves; so are containerized ones, unless `ODOO_ACTIVITY_DOCKER=1`.
+    list themselves; so are containerized ones, unless
+    `ODOO_ACTIVITY_DOCKER=1`. On odoo.sh the build's own root is dropped,
+    since `odoosh_instances` lists it, and only that one.
 
     A wrapper that execs odoo in a venv (`pew in <venv> odoo ...`) matches
     too and becomes the root instead of the odoo process it spawned, so
@@ -655,6 +661,15 @@ def local_instances(host: Host = LOCAL) -> list[Instance]:
     roots = []
 
     found = _odoo_roots(by_pid)
+    # on odoo.sh, only the build is already listed -- odoo.sh's init names it
+    # in its own proctitle, `ODOO.SH: [<build> / dev / 18.0]`, and that name is
+    # the build's db. Its init reaps orphans, so the other roots it parents are
+    # hand-started instances and stay here; ps order says nothing about which
+    # root is which.
+    init = by_pid.get("1")
+    build_db = None
+    if init is not None and init["cmd"].startswith(_ODOOSH_INIT):
+        build_db = init["cmd"].partition("[")[2].partition("/")[0].strip()
     parents = {root: by_pid.get(by_pid[root]["ppid"]) for root in found}
     # only a manager-parented root needs its cgroup read, and reading them
     # together keeps a remote host to one round trip for all of them
@@ -673,6 +688,8 @@ def local_instances(host: Host = LOCAL) -> list[Instance]:
         pid = _odoo_master(root, by_pid, children)
         cwd = _proc_link(pid, "cwd", host)
         options = _cli_options(by_pid[pid]["cmd"])
+        if build_db is not None and options.get("db_name") == build_db:
+            continue
         roots.append((pid, options, cwd, _local_name(options, cwd)))
 
     taken = Counter(name for *_, name in roots)

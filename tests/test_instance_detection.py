@@ -8,6 +8,8 @@ The argv strings below are trimmed from real processes on a dev machine.
 
 from types import SimpleNamespace
 
+import pytest
+
 from odoo_activity import managers, probes
 from odoo_activity.host import Host
 from odoo_activity.probes import Instance, ProcRow
@@ -16,6 +18,13 @@ _EGG = "/home/x/venvs/venv-odoo18/bin/python /home/x/venvs/venv-odoo18/bin/odoo 
 _BIN = "python3 /home/x/demo/18.0/odoo/odoo-bin --config config/local.conf -d demo"
 _SUPERVISED = "/home/x/venvs/demo/bin/python odoo/odoo-bin --config config/supervisor.conf -d prod"
 _WRAPPER = "/usr/bin/python3 /home/x/.local/bin/pew in venv-odoo18 /home/x/venvs/venv-odoo18/bin/odoo -d v18c_queue"
+# odoo.sh: the platform runs odoo straight off pid 1, and puts the subcommand
+# *after* the flags, unlike every argv above
+_ODOOSH = (
+    "python3 /home/odoo/src/odoo/odoo-bin --addons-path=/home/odoo/src/odoo/addons"
+    " server --database=acme-odoo-main-123 --config /home/odoo/.config/odoo/odoo.conf"
+)
+_ODOOSH_INIT = "ODOO.SH: [acme-odoo-main-123 / dev / 18.0]"
 
 _SCOPE_CGROUP = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/vte-spawn-ab-cd.scope\n"
 _UNIT_CGROUP = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/odoo-demo.service\n"
@@ -160,6 +169,43 @@ def test_unreadable_cgroup_keeps_the_parent_based_answer(monkeypatch):
     monkeypatch.setattr(Host, "read_text", lambda *_: "")  # what a remote `cat` failure looks like
 
     assert probes.local_instances(Host()) == []
+
+
+def test_odoosh_build_is_not_also_a_directly_run_instance(monkeypatch):
+    """odoo.sh runs the build's odoo straight off pid 1, whose proctitle is the
+    only thing naming the platform. Without recognising it the box listed its
+    one build twice — once as `odoosh`, once here — and only while the build
+    was awake, since a sleeping build has no process to scan."""
+    by_pid = {"100": _row("100", "1", _ODOOSH), "1": _row("1", "0", _ODOOSH_INIT)}
+    monkeypatch.setattr(probes, "_ps_snapshot", lambda *_: (by_pid, {}))
+
+    assert probes._odoosh_master_pid(Host()) == "100"  # the pid the odoosh row claims
+    assert probes.local_instances(Host()) == []
+
+
+# the build before the hand-started one, after it (a redeploy), or asleep
+@pytest.mark.parametrize("build_pid", ["100", "900", None])
+def test_odoosh_drops_only_the_build_not_a_hand_started_instance(monkeypatch, build_pid):
+    """odoo.sh's init reaps orphans like `systemd --user` does, so a second
+    instance someone started by hand ends up parented by pid 1 too. Only the
+    build's own root -- the one serving the db pid 1 names -- is dropped,
+    whatever order ps lists them in, or that instance was hidden from every
+    manager at once."""
+    manual = "python3 /home/odoo/src/odoo/odoo-bin --config /home/odoo/manual.conf -d scratch --http-port 9069"
+    by_pid = {
+        "200": _row("200", "1", manual),  # started from a shell that has since exited
+        "1": _row("1", "0", _ODOOSH_INIT),
+    }
+    if build_pid is not None:
+        by_pid[build_pid] = _row(build_pid, "1", _ODOOSH)
+    monkeypatch.setattr(probes, "_ps_snapshot", lambda *_: (by_pid, {}))
+    monkeypatch.setattr(probes, "_proc_link", lambda *_: None)
+    monkeypatch.setattr(probes, "_proc_uptime", lambda *_: 60.0)
+
+    found = probes.local_instances(Host())
+
+    assert [inst["name"] for inst in found] == ["scratch"]
+    assert found[0]["pid"] == "200"
 
 
 def test_row_points_at_odoo_itself_not_the_wrapper_that_spawned_it(monkeypatch):
