@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.26.2 (2026-09-22)
+
+### Bug Fixes
+
+- **host**: Find odoo.sh's tools under ~/.local/bin over ssh
+  ([`518d332`](https://github.com/trobz/odoo-activity/commit/518d3322abada72c879a61c74a4b96ca0001c470))
+
+- **probes**: Stop listing odoo.sh's own odoo instance twice
+  ([`d769dbf`](https://github.com/trobz/odoo-activity/commit/d769dbfd21ea4801b899e73781958b9cadb74aec))
+
+
 ## v0.26.1 (2026-09-18)
 
 ### Bug Fixes
