@@ -615,3 +615,36 @@ def test_neutralized_databases_answers_nothing_when_odoo_db_cannot(monkeypatch):
     monkeypatch.setattr(Host, "popen", hanging)
     assert probes.neutralized_databases(None, Host()) == {}
     assert killed == [True]  # not left running behind us
+
+
+def test_shell_command_replaces_the_live_subcommand(monkeypatch):
+    """A subcommand already in the live argv has to be *replaced*: kept, it
+    becomes a leftover positional -- `unrecognized parameters: 'server'` -- and
+    the shell never starts. Both places odoo reads one from: after the
+    `--addons-path=` it strips first (odoo.sh), and right after the script."""
+    odoosh = "/usr/bin/python3 /opt/odoo/odoo-bin --addons-path=/x server --database=db"
+    monkeypatch.setattr(probes, "procs_of", _fake_procs(odoosh))
+    assert (
+        probes.shell_command(_INSTANCE, Host())
+        == "/usr/bin/python3 /opt/odoo/odoo-bin --addons-path=/x shell --no-http --database=db"
+    )
+
+    monkeypatch.setattr(probes, "procs_of", _fake_procs("/opt/odoo/odoo-bin server -d db"))
+    assert probes.shell_command(_INSTANCE, Host()) == "/opt/odoo/odoo-bin shell --no-http -d db"
+
+
+def test_shell_command_leaves_an_existing_shell_alone(monkeypatch):
+    """A process already running `shell` is copied as-is -- appending a second
+    one would make it the leftover positional this time."""
+    monkeypatch.setattr(probes, "procs_of", _fake_procs("/opt/odoo/odoo-bin --addons-path=/x shell --no-http"))
+    assert probes.shell_command(_INSTANCE, Host()) == "/opt/odoo/odoo-bin --addons-path=/x shell --no-http"
+
+
+def test_shell_command_skips_interpreter_flags(monkeypatch):
+    """The script is the interpreter's first non-flag word, not always argv[1]:
+    counted as argv[1], `-u` pushes the script into the subcommand slot, where
+    it gets replaced by `shell`."""
+    for script in ("-u /opt/odoo/odoo-bin", "-m odoo"):
+        monkeypatch.setattr(probes, "procs_of", _fake_procs(f"/usr/bin/python3 {script} --config=/etc/odoo.conf"))
+        expected = f"/usr/bin/python3 {script} shell --no-http --config=/etc/odoo.conf"
+        assert probes.shell_command(_INSTANCE, Host()) == expected, script

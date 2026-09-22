@@ -1870,7 +1870,9 @@ def shell_command(inst: Instance, host: Host = LOCAL) -> str | None:
     """Return an `odoo-bin shell --no-http` command for a running instance, or None.
 
     Builds from the live process argv, absolutizing argv[0] to ensure execution
-    outside the process context. Appends `shell --no-http` if not already present.
+    outside the process context. A subcommand already in that argv (`server`) is
+    *replaced* by `shell` rather than joined by a second one: odoo reads the
+    first and rejects what's left -- `unrecognized parameters: 'server'`.
     """
     host = container_host(inst, host)
     procs = procs_of(inst, host)
@@ -1880,11 +1882,23 @@ def shell_command(inst: Instance, host: Host = LOCAL) -> str | None:
     tokens = procs[0]["cmd"].split()
     tokens[0] = _resolve_argv0(tokens[0], procs[0]["pid"], host)
 
-    split_at = next((i for i, tok in enumerate(tokens) if tok.startswith("-")), len(tokens))
-    if "shell" in tokens[:split_at]:
-        return " ".join(tokens)
+    # where odoo-bin itself reads the subcommand (odoo/cli/command.py:main): right
+    # after the script, one further when odoo strips a leading --addons-path= first.
+    # The script is argv[0] itself, or an interpreter's first non-flag word
+    # (`python -u odoo-bin`, `python -m odoo`)
+    at = 1
+    if os.path.basename(tokens[0]).startswith("python"):
+        at = next((i for i, tok in enumerate(tokens[1:], 1) if not tok.startswith("-")), len(tokens) - 1) + 1
+    if len(tokens) > at + 1 and tokens[at].startswith("--addons-path=") and not tokens[at + 1].startswith("-"):
+        at += 1
 
-    return " ".join([*tokens[:split_at], "shell", "--no-http", *tokens[split_at:]])
+    rest = tokens[at:]
+    if rest and not rest[0].startswith("-"):  # a subcommand here: swap it, don't add a second one
+        if rest[0] == "shell":
+            return " ".join(tokens)
+        rest = rest[1:]
+
+    return " ".join([*tokens[:at], "shell", "--no-http", *rest])
 
 
 def try_local_clipboard(text: str) -> bool:
