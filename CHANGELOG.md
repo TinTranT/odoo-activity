@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.26.3 (2026-09-22)
+
+### Bug Fixes
+
+- **probes**: Find the odoo script past interpreter flags
+  ([`3d81207`](https://github.com/trobz/odoo-activity/commit/3d812071cdd5e53ed6ec32693f0efd68bd6e7170))
+
+- **probes**: Replace the live subcommand in the copied shell command
+  ([`6581804`](https://github.com/trobz/odoo-activity/commit/6581804be1e480dedecfdd635aac33b5e8a7a33b))
+
+
 ## v0.26.2 (2026-09-22)
 
 ### Bug Fixes
