@@ -1866,8 +1866,12 @@ def shell_command(inst: Instance, host: Host = LOCAL) -> str | None:
     tokens[0] = _resolve_argv0(tokens[0], procs[0]["pid"], host)
 
     # where odoo-bin itself reads the subcommand (odoo/cli/command.py:main): right
-    # after the script, one further when odoo strips a leading --addons-path= first
-    at = 2 if os.path.basename(tokens[0]).startswith("python") else 1  # argv[0]: interpreter or odoo-bin
+    # after the script, one further when odoo strips a leading --addons-path= first.
+    # The script is argv[0] itself, or an interpreter's first non-flag word
+    # (`python -u odoo-bin`, `python -m odoo`)
+    at = 1
+    if os.path.basename(tokens[0]).startswith("python"):
+        at = next((i for i, tok in enumerate(tokens[1:], 1) if not tok.startswith("-")), len(tokens) - 1) + 1
     if len(tokens) > at + 1 and tokens[at].startswith("--addons-path=") and not tokens[at + 1].startswith("-"):
         at += 1
 
