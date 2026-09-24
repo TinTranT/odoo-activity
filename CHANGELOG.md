@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v0.27.0 (2026-09-24)
+
+### Features
+
+- **log-analysis**: Add Logs Analysis tab for odoo-logs, with drill-to-traceback
+  ([`8b6d118`](https://github.com/trobz/odoo-activity/commit/8b6d1181d5acf0cede9ea2b8922704827ed34529))
+
+- **log-analysis**: Add mails to the Logs Analysis tab
+  ([`54f3288`](https://github.com/trobz/odoo-activity/commit/54f32881edfa5120186a25f053646a963a435561))
+
+
 ## v0.26.3 (2026-09-22)
 
 ### Bug Fixes
