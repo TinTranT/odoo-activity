@@ -2815,7 +2815,7 @@ def parse_odoo_db_output(stdout: str, stderr: str) -> tuple[list[dict] | None, s
 class DbFlags(TypedDict):
     """A db's `database.*` params, as `odoo-db list` reports them."""
 
-    neutralized: bool
+    neutralized: bool  # unset is False, not None: a prod db never sets it
     shrunk: bool | None
     anonymized: bool | None
     obfuscated: bool | None

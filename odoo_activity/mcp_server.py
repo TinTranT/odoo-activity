@@ -331,6 +331,7 @@ def instance_databases(name: str, *, target: Host) -> InstanceDatabases | None:
     `source_dump_datetime` (ISO 8601, or the raw value if unparseable).
     Null means the key is not set (or the host's odoo-db predates it):
     unknown, not false — false means the copy pipeline skipped that step.
+    `neutralized` is never null: unset counts as not neutralized.
 
     A database missing from the map is one odoo-db could not read (postgres
     down, or not an odoo database) — unknown, never a guess either way. The

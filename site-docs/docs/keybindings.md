@@ -250,7 +250,8 @@ feed) — treat such a database as production until they're cleared — and red
 where it isn't neutralized at all.
 
 Under it, a **Database flags** table lists every one of those flags as
-`yes`/`no`/`not set` (never copied), plus the dump timestamp.
+`yes`/`no`/`not set` (never copied, or odoo-db too old to know it), plus the
+dump timestamp.
 
 Below that come the secrets neutralization never touches: it clears what a
 database can *do*, not what it *holds*, and only for modules shipping a

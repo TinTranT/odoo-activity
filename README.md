@@ -356,7 +356,7 @@ in database mode).
   box's cluster) deliberately doesn't apply to it.
   Each db row then carries its neutralization status, straight off
   `odoo-db list`: green `NEUTRALIZED` where the database claims
-  `database.is_neutralized`, red `NOT NEUTRALIZED` where it does not —
+  `database.is_neutralized`, red `NOT NEUTRALIZED` where it is false or unset —
   treat every action on a red one as production. Binary on purpose, and one
   odoo-db run for the whole cluster: this fires on every instance
   highlight, often against a host loaded enough to be worth debugging. A

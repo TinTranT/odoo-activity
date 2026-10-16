@@ -78,7 +78,8 @@ def _verdict(report: dict) -> Text:
 
 
 def _flag_value(value: bool | None) -> str:
-    return "not set" if value is None else "yes" if value else "no"  # not set = never copied, unlike "no"
+    # not set = never copied or odoo-db too old, unlike "no"
+    return "not set" if value is None else "yes" if value else "no"
 
 
 def _flags_section(flags: DbFlags | None) -> RenderableType | None:
